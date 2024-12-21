@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using WebApplication1.Model;
 
 namespace WebApplication1.Controllers
@@ -28,7 +29,7 @@ namespace WebApplication1.Controllers
             book1.AvailableCopies = book.AvailableCopies;
             _dbContext.Add(book1);
            await  _dbContext.SaveChangesAsync();
-                message = "fdg"; ;
+                message = "Book added Succssfully"; ;
             }
             catch(Exception ex)
             {
@@ -51,63 +52,92 @@ namespace WebApplication1.Controllers
             return book1; ;
         }
 
-        //[HttpDelete("deleteBook/{id}")]
-        //public async Task<IActionResult> DeleteBook(int id)
-        //{ 
-        //}
+        [HttpDelete("deleteBook/{id}")]
+        public async Task<IActionResult> DeleteBook(int id)
+        {
+            try
+            {
+                Book book = _dbContext.books.Where(x => x.Id == id).FirstOrDefault();
+                _dbContext.Remove(book);
+				await _dbContext.SaveChangesAsync();
+			}
+            catch (Exception ex) 
+            { 
+            
+            }
+            return Ok(new { Message = "Book Deleted successfully" });
 
-        //[HttpGet("listBooks")]
-        //public async Task<IActionResult> ListBooks() { /* Logic */ }
+		}
 
-        [HttpPost("issueBook")]
+		[HttpGet("booklist")]
+		public async Task<IActionResult> GetBookListWithIssuedCount()
+		{
+			var booksWithIssuedCount = await _dbContext.books
+				.Select(book => new
+				{
+					book.Id,
+					book.Title,
+					book.Author,
+					book.TotalCopies,
+					book.AvailableCopies,
+					IssuedCount = book.TotalCopies - book.AvailableCopies
+				})
+				.ToListAsync();
+
+			return Ok(booksWithIssuedCount);
+		}
+
+		[HttpGet("issuedBooks")]
+		public async Task<IActionResult> GetIssuedBooks()
+		{
+			var issuedBooks = await _dbContext.issues
+				.Where(issue => issue.Is_active)
+				.Select(issue => new
+				{
+					issue.Id,
+					BookTitle = _dbContext.books.Where(book => book.Id == issue.BookId).Select(book => book.Title).FirstOrDefault(),
+					issue.IssuedTo,
+					issue.IssueDate
+				})
+				.ToListAsync();
+
+			return Ok(issuedBooks);
+		}
+
+		[HttpPost("issueBook")]
         public async Task<IActionResult> IssueBook(Issue issue)
         {
-            if (issue == null || issue.BookId <= 0 || issue.Id <= 0)
+            if (issue == null || issue.BookId <= 0)
                 return BadRequest("Invalid issue details.");
-
             var book = await _dbContext.books.FindAsync(issue.BookId);
-
             if (book == null)
                 return NotFound("Book not found.");
-
             if (book.AvailableCopies <= 0)
                 return BadRequest("No available copies for this book.");
-
-            // Update the available copies
             book.AvailableCopies -= 1;
-
-            // Add the issue record
-            _dbContext.issues.Add(issue);
-
+			issue.Is_active = true;
+			_dbContext.issues.Add(issue);
             await _dbContext.SaveChangesAsync();
-
             return Ok(new { Message = "Book issued successfully", Issue = issue });
         }
 
-        [HttpPost("returnBook")]
-        public async Task<IActionResult> ReturnBook(int issueId)
-        {
-            var issue = await _dbContext.issues.FindAsync(issueId);
-
-            if (issue == null)
-                return NotFound("Issue not found.");
-
-            var book = await _dbContext.books.FindAsync(issue.BookId);
-
-            if (book == null)
-                return NotFound("Book not found for this issue.");
-
-            // Update the available copies
-            book.AvailableCopies += 1;
-
-            // Optionally, mark the issue as resolved or remove it
-            _dbContext.issues.Remove(issue);
-
-            await _dbContext.SaveChangesAsync();
-
-            return Ok(new { Message = "Book returned successfully", IssueId = issueId });
-        }
+		[HttpPost("returnBook")]
+		public async Task<IActionResult> ReturnBook(int issueId, [FromBody] DateTime returnDate)
+		{
+			var issue = await _dbContext.issues.FindAsync(issueId);
+			if (issue == null)
+				return NotFound("Issue not found.");
+			var book = await _dbContext.books.FindAsync(issue.BookId);
+			if (book == null)
+				return NotFound("Book not found for this issue.");
+			issue.Is_active = false;
+			issue.ReturnDate = returnDate;
+			book.AvailableCopies += 1;
+			await _dbContext.SaveChangesAsync();
+			return Ok(new { Message = "Book returned successfully", Issue = issue });
+		}
 
 
-    }
+
+	}
 }

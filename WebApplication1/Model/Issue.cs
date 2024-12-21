@@ -11,5 +11,6 @@ namespace WebApplication1.Model
         public string IssuedTo { get; set; }
         public DateTime IssueDate { get; set; }
         public DateTime? ReturnDate { get; set; }
+        public bool Is_active { get; set; }
     }
 }
